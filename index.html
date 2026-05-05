@@ -304,7 +304,7 @@ const TEMPLATES=[
 let accessToken=null,allRows=[],headers=[],currentSheet='',editIdx=-1,dragRow=null,notifEnabled=false,tokenClient=null;
 
 function setStatus(msg,type='inf'){const el=document.getElementById('status');el.textContent=msg;el.className='smsg '+type;}
-function parseDate(s){if(!s)return null;const p=s.split('.');if(p.length===3)return new Date(p[2],p[1]-1,p[0]);return null;}
+function parseDate(s){if(!s)return null;if(s.includes('-')){const p=s.split('-');return new Date(p[0],p[1]-1,p[2]);}const p=s.split('.');if(p.length===3)return new Date(p[2],p[1]-1,p[0]);return null;}
 function todayStr(){return new Date().toLocaleDateString('ru-RU');}
 function daysBetween(d){if(!d)return 999;return Math.floor((new Date()-d)/86400000);}
 function colIdx(kws){return headers.findIndex(h=>kws.some(k=>h.toLowerCase().includes(k)));}
@@ -376,7 +376,7 @@ function renderStats(){
 }
 
 function renderTable(rows){
-  const sc=colIdx(['статус']),dc=colIdx(['дата']);
+  const sc=colIdx(['статус']),dc=colIdx(['follow-up','фоллоу']);
   document.getElementById('t-head').innerHTML='<tr>'+headers.map(h=>`<th>${h}</th>`).join('')+'<th></th></tr>';
   if(!rows.length){document.getElementById('t-body').innerHTML=`<tr><td colspan="${headers.length+1}" style="text-align:center;color:var(--text-3);padding:24px;">Нет данных</td></tr>`;return;}
   document.getElementById('t-body').innerHTML=rows.map(row=>{
@@ -397,7 +397,7 @@ function filterTable(){
 
 function renderKanban(){
   document.getElementById('kanban-sheet').textContent=currentSheet;
-  const sc=colIdx(['статус']),cc=colIdx(['компани']),nc=colIdx(['следующ','шаг']),dc=colIdx(['дата']);
+  const sc=colIdx(['статус']),cc=colIdx(['компани']),nc=colIdx(['следующ','шаг']),dc=colIdx(['follow-up','фоллоу']);
   const cols={};FORD.forEach(s=>cols[s]=[]);
   allRows.forEach((r,i)=>{const s=(r[sc]||'Не написал').trim();if(cols[s])cols[s].push({r,i});});
   document.getElementById('kanban-board').innerHTML=FORD.map(s=>`
@@ -498,7 +498,9 @@ async function addRow(){
   if(!accessToken){document.getElementById('add-msg').textContent='Войди в Google';return;}
   const co=document.getElementById('n-company').value.trim();
   if(!co){document.getElementById('add-msg').textContent='Укажи компанию';return;}
-  const row=[document.getElementById('n-city').value.trim(),co,document.getElementById('n-contact').value.trim(),document.getElementById('n-link').value.trim(),document.getElementById('n-status').value,document.getElementById('n-next').value.trim(),document.getElementById('n-date').value,document.getElementById('n-note').value.trim(),todayStr()];
+  const ndRawAdd=document.getElementById('n-date').value;
+  const ndAdd=ndRawAdd?ndRawAdd.split('-').reverse().join('.'):'';
+  const row=[document.getElementById('n-city').value.trim(),co,document.getElementById('n-contact').value.trim(),document.getElementById('n-link').value.trim(),document.getElementById('n-status').value,document.getElementById('n-next').value.trim(),ndAdd,document.getElementById('n-note').value.trim(),todayStr()];
   try{
     const res=await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SID}/values/${encodeURIComponent(currentSheet)}:append?valueInputOption=USER_ENTERED`,{method:'POST',headers:authHeaders(),body:JSON.stringify({values:[row]})});
     const d=await res.json();
@@ -516,7 +518,9 @@ function openEdit(idx){
   document.getElementById('edit-title').textContent=row[cc]||'Контакт';
   document.getElementById('edit-status').value=sc>=0?row[sc]||'Не написал':'Не написал';
   document.getElementById('edit-next').value=nc>=0?row[nc]||'':'';
-  document.getElementById('edit-date').value=dc>=0?row[dc]||'':'';
+  const rawDate=dc>=0?row[dc]||'':'';
+  const fmtDate=rawDate&&rawDate.includes('.')?rawDate.split('.').reverse().join('-'):rawDate;
+  document.getElementById('edit-date').value=fmtDate;
   const hist=notec>=0?row[notec]||'':'';
   document.getElementById('edit-history').innerHTML=hist?hist.split('|||').reverse().map(h=>{const parts=h.split(': ');const date=parts.shift();return`<div class="hist-item"><div class="hist-date">${date}</div>${parts.join(': ')}</div>`;}).join(''):'<p style="font-size:12px;color:var(--text-3);">История пуста</p>';
   document.getElementById('edit-note-new').value='';document.getElementById('edit-msg').textContent='';
@@ -529,7 +533,8 @@ async function saveEdit(){
   const rowNum=editIdx+2;
   const ns=document.getElementById('edit-status').value;
   const nn=document.getElementById('edit-next').value;
-  const nd=document.getElementById('edit-date').value;
+  const ndRaw=document.getElementById('edit-date').value;
+  const nd=ndRaw?ndRaw.split('-').reverse().join('.'):'';  
   const newNote=document.getElementById('edit-note-new').value.trim();
   const existHist=notec>=0?allRows[editIdx][notec]||'':'';
   const updHist=newNote?(existHist?existHist+'|||'+todayStr()+': '+newNote:todayStr()+': '+newNote):existHist;
